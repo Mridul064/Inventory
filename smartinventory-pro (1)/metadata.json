@@ -1,0 +1,5 @@
+{
+  "name": "SmartInventory Pro",
+  "description": "An intelligent inventory management system with real-time analytics, AI-powered product descriptions, and automated stock insights using Gemini 3.",
+  "requestFramePermissions": []
+}
