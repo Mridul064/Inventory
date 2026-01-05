@@ -178,7 +178,7 @@ const Indents: React.FC<IndentsProps> = ({ indents, products, user, onAddIndent,
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Select Product</label>
                 <select 
                   required
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium"
                   value={formData.productId}
                   onChange={(e) => setFormData(prev => ({ ...prev, productId: e.target.value }))}
                 >
@@ -196,7 +196,7 @@ const Indents: React.FC<IndentsProps> = ({ indents, products, user, onAddIndent,
                       type="number"
                       min="1"
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium"
                       value={formData.quantity}
                       onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) }))}
                     />
@@ -208,7 +208,7 @@ const Indents: React.FC<IndentsProps> = ({ indents, products, user, onAddIndent,
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Priority</label>
                   <select 
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium"
                     value={formData.priority}
                     onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value as any }))}
                   >

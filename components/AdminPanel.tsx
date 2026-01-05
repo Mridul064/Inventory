@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { User, Department, Permission, InventoryFormConfig, AppConfig } from '../types';
 import { PERMISSION_LIST, ADMIN_PERMISSIONS } from '../constants';
 import { 
@@ -29,7 +29,12 @@ import {
   Smartphone,
   Server,
   ExternalLink,
-  Code
+  Code,
+  Search,
+  ChevronRight,
+  Upload,
+  Save,
+  CheckCircle2
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -65,12 +70,42 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [selectedUserForPassword, setSelectedUserForPassword] = useState<User | null>(null);
+  const [selectedUserForPermissions, setSelectedUserForPermissions] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [tempPermissions, setTempPermissions] = useState<Permission[]>([]);
   
+  // Local state for Branding to avoid immediate global updates
+  const [localAppConfig, setLocalAppConfig] = useState<AppConfig>({ ...appConfig });
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   const [activeTab, setActiveTab] = useState<'access' | 'custom' | 'system'>('access');
 
   const hasPermission = (p: Permission) => currentUser.permissions.includes(p);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => 
+      user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      user.username.toLowerCase().includes(userSearchTerm.toLowerCase())
+    );
+  }, [users, userSearchTerm]);
+
+  const groupedPermissions = useMemo(() => {
+    return PERMISSION_LIST.reduce((acc, p) => {
+      if (!acc[p.group]) acc[p.group] = [];
+      acc[p.group].push(p);
+      return acc;
+    }, {} as Record<string, typeof PERMISSION_LIST>);
+  }, []);
+
+  const togglePermission = (pId: Permission) => {
+    setTempPermissions(prev => 
+      prev.includes(pId) ? prev.filter(p => p !== pId) : [...prev, pId]
+    );
+  };
 
   const toggleFormField = (fieldId: string) => {
     const protectedFields = ['name', 'quantity', 'unit'];
@@ -89,7 +124,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     onUpdateFormConfig({ fields: newFields });
   };
 
-  // Fixed the TypeScript error by specifying HTMLFormElement in React.FormEvent
   const handleCreateUser = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -107,6 +141,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsUserModalOpen(false);
   };
 
+  const handleUpdatePermissions = () => {
+    if (selectedUserForPermissions) {
+      onUpdateUser({ ...selectedUserForPermissions, permissions: tempPermissions });
+      setIsPermissionModalOpen(false);
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLocalAppConfig(prev => ({ ...prev, logoUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveBranding = () => {
+    onUpdateAppConfig(localAppConfig);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       
@@ -120,19 +178,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {activeTab === 'access' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-left-4 duration-300">
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <Users className="w-6 h-6 text-indigo-600" />
                 Employee Access Control
               </h2>
-              {hasPermission('USER_MANAGE') && (
-                <button 
-                  onClick={() => setIsUserModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg"
-                >
-                  <UserPlus className="w-4 h-4" /> New ID
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search employees..." 
+                    className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm text-black font-medium focus:ring-2 focus:ring-indigo-500 outline-none w-full md:w-64 transition-all"
+                    value={userSearchTerm}
+                    onChange={(e) => setUserSearchTerm(e.target.value)}
+                  />
+                </div>
+                {hasPermission('USER_MANAGE') && (
+                  <button 
+                    onClick={() => setIsUserModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shrink-0"
+                  >
+                    <UserPlus className="w-4 h-4" /> New ID
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
@@ -145,38 +215,64 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {users.map(user => (
-                    <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase">
-                            {user.name.charAt(0)}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-slate-900">{user.name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">@{user.username} | {user.department}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold">
-                          {user.permissions.length} RIGHTS
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {hasPermission('USER_PASS_RESET') && (
-                            <button onClick={() => { setSelectedUserForPassword(user); setIsPasswordModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg">
-                              <Key className="w-4 h-4" />
-                            </button>
-                          )}
-                          {hasPermission('USER_MANAGE') && user.username !== 'admin' && (
-                            <button onClick={() => onDeleteUser(user.id)} className="p-2 text-slate-300 hover:text-rose-600 rounded-lg"><Trash2 className="w-4 h-4" /></button>
-                          )}
-                        </div>
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-6 py-12 text-center text-slate-400 font-medium italic">
+                        No employees found matching "{userSearchTerm}"
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredUsers.map(user => (
+                      <tr key={user.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase">
+                              {user.name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-slate-900">{user.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">@{user.username} | {user.department}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <button 
+                            onClick={() => {
+                              setSelectedUserForPermissions(user);
+                              setTempPermissions(user.permissions);
+                              setIsPermissionModalOpen(true);
+                            }}
+                            className="px-2 py-0.5 bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors rounded text-[10px] font-bold border border-slate-200"
+                          >
+                            {user.permissions.length} RIGHTS
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {hasPermission('USER_PASS_RESET') && (
+                              <button onClick={() => { setSelectedUserForPassword(user); setIsPasswordModalOpen(true); }} className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg" title="Change Password">
+                                <Key className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setSelectedUserForPermissions(user);
+                                setTempPermissions(user.permissions);
+                                setIsPermissionModalOpen(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-indigo-600 rounded-lg" 
+                              title="Allocation Rights"
+                            >
+                              <Shield className="w-4 h-4" />
+                            </button>
+                            {hasPermission('USER_MANAGE') && user.username !== 'admin' && (
+                              <button onClick={() => onDeleteUser(user.id)} className="p-2 text-slate-300 hover:text-rose-600 rounded-lg" title="Delete Account"><Trash2 className="w-4 h-4" /></button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -207,31 +303,90 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {activeTab === 'custom' && (
         <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <Palette className="w-5 h-5 text-indigo-600" /> Branding Settings
-            </h3>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-8">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Palette className="w-5 h-5 text-indigo-600" /> Branding Settings
+              </h3>
+              {saveSuccess && (
+                <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold animate-in fade-in slide-in-from-right-2">
+                  <CheckCircle2 className="w-4 h-4" /> Branding Saved Successfully!
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">App Name (System Label)</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold" value={appConfig.appName} onChange={(e) => onUpdateAppConfig({ ...appConfig, appName: e.target.value })} />
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold text-black" 
+                    value={localAppConfig.appName} 
+                    onChange={(e) => setLocalAppConfig({ ...localAppConfig, appName: e.target.value })} 
+                  />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Logo Image URL</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-xs" value={appConfig.logoUrl} onChange={(e) => onUpdateAppConfig({ ...appConfig, logoUrl: e.target.value })} placeholder="https://..." />
+                
+                <div className="space-y-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">App Logo</label>
+                  
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Option 1: Upload from Device</label>
+                      <input 
+                        type="file" 
+                        ref={logoInputRef}
+                        accept="image/*"
+                        className="hidden" 
+                        onChange={handleLogoUpload}
+                      />
+                      <button 
+                        onClick={() => logoInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-dashed border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50 transition-all text-slate-600 font-bold text-sm"
+                      >
+                        <Upload className="w-4 h-4" /> Choose Logo File
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Option 2: Logo Image URL</label>
+                      <input 
+                        type="text" 
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-xs text-black" 
+                        value={localAppConfig.logoUrl} 
+                        onChange={(e) => setLocalAppConfig({ ...localAppConfig, logoUrl: e.target.value })} 
+                        placeholder="https://..." 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button 
+                    onClick={handleSaveBranding}
+                    className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-5 h-5" /> Save Branding Changes
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-6">
-                <div className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-lg border border-slate-100">
-                  <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center overflow-hidden">
-                    {appConfig.logoUrl ? <img src={appConfig.logoUrl} className="w-full h-full object-cover" alt="Preview" /> : <Shield className="text-white w-6 h-6" />}
+
+              <div className="flex flex-col items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 p-6 space-y-4">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Live Preview</span>
+                <div className="flex items-center gap-4 bg-white p-5 rounded-2xl shadow-xl border border-slate-100 w-full max-w-xs">
+                  <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+                    {localAppConfig.logoUrl ? (
+                      <img src={localAppConfig.logoUrl} className="w-full h-full object-cover" alt="Preview" />
+                    ) : (
+                      <Shield className="text-white w-7 h-7" />
+                    )}
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Identity Preview</span>
-                    <span className="font-black text-slate-900 text-lg">{appConfig.appName}</span>
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest truncate">System Brand</span>
+                    <span className="font-black text-slate-900 text-xl truncate">{localAppConfig.appName || 'No Name Set'}</span>
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 text-center px-4">Preview reflects unsaved local changes.</p>
               </div>
             </div>
           </div>
@@ -256,7 +411,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       )}
                       {field.isEnabled && !isLocked && (
-                        <button onClick={() => toggleFieldRequired(field.id)} className={`px-2 py-1 rounded text-[10px] font-black uppercase ${field.isRequired ? 'bg-rose-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                        <button onClick={() => toggleFieldRequired(field.id)} className={`px-2 py-1 rounded text-[10px] font-black uppercase ${field.isRequired ? 'bg-rose-50 text-white' : 'bg-slate-200 text-slate-500'}`}>
                           {field.isRequired ? 'Req' : 'Opt'}
                         </button>
                       )}
@@ -384,21 +539,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Full Name</label>
-                  <input name="name" required placeholder="e.g. Rahul Sharma" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input name="name" required placeholder="e.g. Rahul Sharma" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Department</label>
-                  <select name="department" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <select name="department" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium">
                     {departments.map(d => <option key={d}>{d}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">System Username</label>
-                  <input name="username" required placeholder="e.g. rahul123" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input name="username" required placeholder="e.g. rahul123" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Login Password</label>
-                  <input name="password" required type="password" placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+                  <input name="password" required type="password" placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-black font-medium" />
                 </div>
               </div>
               <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all uppercase tracking-widest">Create Profile</button>
@@ -424,7 +579,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
               setIsPasswordModalOpen(false);
               setNewPassword('');
             }} className="space-y-4">
-              <input autoFocus required type="password" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="New Secure Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <input autoFocus required type="password" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-black font-medium" placeholder="New Secure Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               <div className="flex gap-2">
                 <button type="button" onClick={() => setIsPasswordModalOpen(false)} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">Cancel</button>
                 <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100">Update</button>

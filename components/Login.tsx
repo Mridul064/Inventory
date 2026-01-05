@@ -69,7 +69,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, existingUsers, appConfig }) => {
                   type="text"
                   required
                   placeholder="Enter your username"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-300"
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-300 text-black font-medium"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -84,7 +84,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, existingUsers, appConfig }) => {
                   type="password"
                   required
                   placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-300"
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-300 text-black font-medium"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />

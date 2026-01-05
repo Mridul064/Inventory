@@ -11,7 +11,10 @@ import {
   ClipboardList,
   ShieldAlert,
   X,
-  ChevronLeft
+  ChevronLeft,
+  PackagePlus,
+  PackageMinus,
+  IndianRupee
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,15 +30,23 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, appCon
   const navItems = [
     { id: NavigationTab.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
     { id: NavigationTab.INVENTORY, label: 'Stock Ledger', icon: Package },
+    { id: NavigationTab.STOCK_ENTRY, label: 'Stock Entry', icon: PackagePlus, permission: 'STOCK_IN' },
+    { id: NavigationTab.STOCK_ISSUE, label: 'Stock Issue', icon: PackageMinus, permission: 'STOCK_OUT' },
     { id: NavigationTab.INDENTS, label: 'Indents', icon: ClipboardList },
     { id: NavigationTab.ANALYTICS, label: 'Analytics', icon: BarChart3 },
+    { id: NavigationTab.COST_ANALYSIS, label: 'Cost Analysis', icon: IndianRupee, permission: 'REPORTS_VIEW' },
   ];
 
+  const filteredNavItems = navItems.filter(item => {
+    if (item.permission && !user.permissions.includes(item.permission as any)) return false;
+    return true;
+  });
+
   if (user.role === 'admin') {
-    navItems.push({ id: NavigationTab.ADMIN_PANEL, label: 'Admin Control', icon: ShieldAlert });
+    filteredNavItems.push({ id: NavigationTab.ADMIN_PANEL, label: 'Admin Control', icon: ShieldAlert });
   }
 
-  navItems.push({ id: NavigationTab.SETTINGS, label: 'Settings', icon: Settings });
+  filteredNavItems.push({ id: NavigationTab.SETTINGS, label: 'Settings', icon: Settings });
 
   const isPWA = window.matchMedia('(display-mode: standalone)').matches;
 
@@ -67,7 +78,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, appCon
       </div>
 
       <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto custom-scrollbar">
-        {navItems.map((item) => (
+        {filteredNavItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}

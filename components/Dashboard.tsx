@@ -8,7 +8,9 @@ import {
   Package,
   Sparkles,
   Loader2,
-  Building2
+  Building2,
+  ArrowDownCircle,
+  ArrowUpCircle
 } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 
@@ -18,6 +20,8 @@ interface DashboardProps {
   user: User;
   stats: {
     totalItems: number;
+    totalReceived: number;
+    totalIssued: number;
     lowStockCount: number;
     totalValue: number;
     uniqueCategories: number;
@@ -40,10 +44,10 @@ const Dashboard: React.FC<DashboardProps> = ({ products, stats, department, user
   }, [department]);
 
   const metricCards = [
-    { label: `${department} Units`, value: stats.totalItems, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Low Stock Items', value: stats.lowStockCount, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Asset Value', value: `₹${stats.totalValue.toLocaleString('en-IN')}`, icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Categories', value: stats.uniqueCategories, icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: `Available Balance`, value: stats.totalItems, icon: Package, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Total Stock Add', value: stats.totalReceived, icon: ArrowDownCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Total Stock Issue', value: stats.totalIssued, icon: ArrowUpCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+    { label: 'Asset Value', value: `₹${stats.totalValue.toLocaleString('en-IN')}`, icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   ];
 
   return (
@@ -53,7 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, stats, department, user
           <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">{card.label}</p>
+                <p className="text-[10px] font-black text-slate-400 mb-1 uppercase tracking-widest">{card.label}</p>
                 <h3 className="text-2xl font-bold text-slate-900">{card.value}</h3>
               </div>
               <div className={`p-3 rounded-xl ${card.bg}`}>

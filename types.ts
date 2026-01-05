@@ -36,7 +36,9 @@ export interface Product {
   department: Department;
   unit: Unit;
   price: number;
-  quantity: number;
+  quantity: number; // This is the Current Available Balance
+  totalReceived: number; // Historical Total Added
+  totalIssued: number; // Historical Total Issued
   minStock: number;
   description: string;
   updatedAt: string;
@@ -45,6 +47,20 @@ export interface Product {
   supplier?: string;
   location?: string;
   expiryDate?: string;
+}
+
+export interface Transaction {
+  id: string;
+  date: string;
+  productId: string;
+  productName: string;
+  type: 'IN' | 'OUT';
+  quantity: number;
+  department: string;
+  user: string;
+  reference?: string;
+  remarks?: string;
+  priceAtTime?: number;
 }
 
 export interface InventoryFieldSetting {
@@ -79,8 +95,11 @@ export interface Indent {
 export enum NavigationTab {
   DASHBOARD = 'dashboard',
   INVENTORY = 'inventory',
+  STOCK_ENTRY = 'stock_entry',
+  STOCK_ISSUE = 'stock_issue',
   INDENTS = 'indents',
   ANALYTICS = 'analytics',
+  COST_ANALYSIS = 'cost_analysis',
   ADMIN_PANEL = 'admin_panel',
   SETTINGS = 'settings'
 }

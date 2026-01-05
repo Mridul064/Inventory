@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { NavigationTab, Product, Department, User, Indent, Permission, InventoryFormConfig, AppConfig } from './types';
+import { NavigationTab, Product, Department, User, Indent, Permission, InventoryFormConfig, AppConfig, Transaction } from './types';
 import { INITIAL_PRODUCTS, DEPARTMENTS as DEFAULT_DEPARTMENTS, ADMIN_PERMISSIONS, DEFAULT_FORM_CONFIG, DEFAULT_APP_CONFIG } from './constants';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -9,16 +9,16 @@ import Analytics from './components/Analytics';
 import Indents from './components/Indents';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
+import StockEntry from './components/StockEntry';
+import StockIssue from './components/StockIssue';
+import CostAnalysis from './components/CostAnalysis';
 import { 
   Search,
-  Bell,
   ChevronDown,
   Building2,
   LogOut,
   AlertTriangle,
-  Settings as SettingsIcon,
-  Menu,
-  X
+  Menu
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -34,6 +34,11 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('inventory_products');
     return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    const saved = localStorage.getItem('inventory_transactions');
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
@@ -76,6 +81,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('inventory_products', JSON.stringify(products));
+    localStorage.setItem('inventory_transactions', JSON.stringify(transactions));
     localStorage.setItem('inventory_depts', JSON.stringify(departments));
     localStorage.setItem('inventory_users_list', JSON.stringify(users));
     localStorage.setItem('inventory_indents', JSON.stringify(indents));
@@ -87,25 +93,19 @@ const App: React.FC = () => {
       localStorage.removeItem('inventory_user');
     }
     document.title = appConfig.appName;
-  }, [products, departments, users, indents, currentUser, formConfig, appConfig]);
+  }, [products, transactions, departments, users, indents, currentUser, formConfig, appConfig]);
 
-  // Handle auto-close sidebar on mobile
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setIsSidebarOpen(false);
-      } else {
-        setIsSidebarOpen(true);
-      }
+      if (window.innerWidth < 1024) setIsSidebarOpen(false);
+      else setIsSidebarOpen(true);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const hasPermission = (p: Permission) => {
-    return currentUser?.permissions.includes(p);
-  };
+  const hasPermission = (p: Permission) => currentUser?.permissions.includes(p);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -123,71 +123,80 @@ const App: React.FC = () => {
     const visibleDept = isGlobal ? activeDept : currentUser?.department;
     const currentProducts = visibleDept === 'All' ? products : products.filter(p => p.department === visibleDept);
     
-    const totalItems = currentProducts.reduce((acc, p) => acc + p.quantity, 0);
+    const totalItems = currentProducts.reduce((acc, p) => acc + (p.quantity || 0), 0);
+    const totalReceived = currentProducts.reduce((acc, p) => acc + (p.totalReceived || 0), 0);
+    const totalIssued = currentProducts.reduce((acc, p) => acc + (p.totalIssued || 0), 0);
     const lowStockCount = currentProducts.filter(p => p.quantity <= p.minStock).length;
     const totalValue = currentProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0);
     const uniqueCategories = new Set(currentProducts.map(p => p.category)).size;
 
-    return { totalItems, lowStockCount, totalValue, uniqueCategories };
+    return { totalItems, totalReceived, totalIssued, lowStockCount, totalValue, uniqueCategories };
   }, [products, activeDept, currentUser]);
 
-  const handleUpdateProduct = (updatedProduct: Product) => {
+  const handleLogTransaction = (type: 'IN' | 'OUT', product: Product, qty: number, reference?: string, remarks?: string, targetDept?: string) => {
+    const newTx: Transaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: new Date().toISOString(),
+      productId: product.id,
+      productName: product.name,
+      type,
+      quantity: qty,
+      department: targetDept || product.department,
+      user: currentUser?.name || 'System',
+      reference,
+      remarks,
+      priceAtTime: product.price
+    };
+    setTransactions(prev => [newTx, ...prev]);
+  };
+
+  const handleUpdateProduct = (updatedProduct: Product, txInfo?: { type: 'IN' | 'OUT', qty: number, ref?: string, rem?: string, dept?: string }) => {
     setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    if (txInfo) {
+      handleLogTransaction(txInfo.type, updatedProduct, txInfo.qty, txInfo.ref, txInfo.rem, txInfo.dept);
+    }
   };
 
   const handleAddProduct = (newProduct: Product) => {
-    setProducts(prev => [...prev, newProduct]);
+    const productWithTracking = {
+      ...newProduct,
+      totalReceived: newProduct.totalReceived || newProduct.quantity || 0,
+      totalIssued: newProduct.totalIssued || 0
+    };
+    setProducts(prev => [...prev, productWithTracking]);
+    if (productWithTracking.quantity > 0) {
+      handleLogTransaction('IN', productWithTracking, productWithTracking.quantity, 'Opening Stock', 'Initial Entry');
+    }
   };
 
   const handleDeleteProduct = (id: string) => {
     setProducts(prev => prev.filter(p => p.id !== id));
+    setTransactions(prev => prev.filter(t => t.productId !== id));
   };
 
   const handleClearAllInventory = () => {
-    if (window.confirm('Are you sure you want to delete ALL items and indents? This cannot be undone.')) {
+    if (window.confirm('Are you sure you want to delete ALL data?')) {
       setProducts([]);
       setIndents([]);
+      setTransactions([]);
     }
   };
 
-  const handleAddIndent = (newIndent: Indent) => {
-    setIndents(prev => [newIndent, ...prev]);
-  };
-
-  const handleUpdateIndentStatus = (id: string, status: Indent['status']) => {
+  const handleAddIndent = (newIndent: Indent) => setIndents(prev => [newIndent, ...prev]);
+  const handleUpdateIndentStatus = (id: string, status: Indent['status']) => 
     setIndents(prev => prev.map(i => i.id === id ? { ...i, status } : i));
-  };
 
-  const handleAddUser = (user: User) => {
-    setUsers(prev => [...prev, user]);
-  };
-
+  const handleAddUser = (user: User) => setUsers(prev => [...prev, user]);
   const handleUpdateUser = (updatedUser: User) => {
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    if (currentUser && currentUser.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
-    }
+    if (currentUser?.id === updatedUser.id) setCurrentUser(updatedUser);
   };
+  const handleDeleteUser = (id: string) => setUsers(prev => prev.filter(u => u.id !== id));
+  const handleAddDept = (dept: Department) => setDepartments(prev => [...prev, dept]);
+  const handleDeleteDept = (dept: Department) => setDepartments(prev => prev.filter(d => d !== dept));
+  const handleLogout = () => setCurrentUser(null);
 
-  const handleDeleteUser = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
-  };
-
-  const handleAddDept = (dept: Department) => {
-    setDepartments(prev => [...prev, dept]);
-  };
-
-  const handleDeleteDept = (dept: Department) => {
-    setDepartments(prev => prev.filter(d => d !== dept));
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-  };
-
-  if (!currentUser) {
-    return <Login onLogin={setCurrentUser} existingUsers={users} appConfig={appConfig} />;
-  }
+  if (!currentUser) return <Login onLogin={setCurrentUser} existingUsers={users} appConfig={appConfig} />;
 
   const renderContent = () => {
     const isGlobal = hasPermission('GLOBAL_ACCESS');
@@ -195,53 +204,30 @@ const App: React.FC = () => {
     
     switch (activeTab) {
       case NavigationTab.DASHBOARD:
-        return hasPermission('DASHBOARD_VIEW') ? 
-          <Dashboard products={filteredProducts} stats={stats} department={effectiveDept} user={currentUser} /> : 
-          <div className="text-center py-20 text-slate-400">Access Denied: Dashboard View Restricted</div>;
+        return <Dashboard products={filteredProducts} stats={stats} department={effectiveDept} user={currentUser} />;
       case NavigationTab.INVENTORY:
-        return hasPermission('INV_VIEW') ? 
-          <InventoryList 
-            products={filteredProducts} 
-            activeDepartment={effectiveDept}
-            onUpdate={handleUpdateProduct} 
-            onAdd={handleAddProduct}
-            onDelete={handleDeleteProduct}
-            user={currentUser}
-            formConfig={formConfig}
-          /> : 
-          <div className="text-center py-20 text-slate-400">Access Denied: Inventory Restricted</div>;
+        return <InventoryList 
+          products={filteredProducts} 
+          transactions={transactions}
+          activeDepartment={effectiveDept}
+          onUpdate={handleUpdateProduct} 
+          onAdd={handleAddProduct}
+          onDelete={handleDeleteProduct}
+          user={currentUser}
+          formConfig={formConfig}
+        />;
+      case NavigationTab.STOCK_ENTRY:
+        return <StockEntry products={products} onUpdate={handleUpdateProduct} user={currentUser} />;
+      case NavigationTab.STOCK_ISSUE:
+        return <StockIssue products={products} onUpdate={handleUpdateProduct} user={currentUser} departments={departments} />;
       case NavigationTab.INDENTS:
-        return hasPermission('IND_VIEW') ? 
-          <Indents 
-            indents={indents} 
-            products={products} 
-            user={currentUser} 
-            onAddIndent={handleAddIndent} 
-            onUpdateStatus={handleUpdateIndentStatus}
-          /> : 
-          <div className="text-center py-20 text-slate-400">Access Denied: Indents Restricted</div>;
+        return <Indents indents={indents} products={products} user={currentUser} onAddIndent={handleAddIndent} onUpdateStatus={handleUpdateIndentStatus} />;
       case NavigationTab.ANALYTICS:
-        return hasPermission('REPORTS_VIEW') ? 
-          <Analytics products={filteredProducts} department={effectiveDept} /> : 
-          <div className="text-center py-20 text-slate-400">Access Denied: Reports Restricted</div>;
+        return <Analytics products={filteredProducts} department={effectiveDept} />;
+      case NavigationTab.COST_ANALYSIS:
+        return <CostAnalysis products={products} transactions={transactions} activeDepartment={effectiveDept} />;
       case NavigationTab.ADMIN_PANEL:
-        return hasPermission('USER_MANAGE') || hasPermission('DEPT_MANAGE') ? 
-          <AdminPanel 
-            users={users}
-            departments={departments}
-            onAddUser={handleAddUser}
-            onUpdateUser={handleUpdateUser}
-            onDeleteUser={handleDeleteUser}
-            onAddDepartment={handleAddDept}
-            onDeleteDepartment={handleDeleteDept}
-            onClearAllData={handleClearAllInventory}
-            currentUser={currentUser}
-            formConfig={formConfig}
-            onUpdateFormConfig={setFormConfig}
-            appConfig={appConfig}
-            onUpdateAppConfig={setAppConfig}
-          /> : 
-          <div className="text-center py-20 text-slate-400">Access Denied: Admin Panel Restricted</div>;
+        return <AdminPanel users={users} departments={departments} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onAddDepartment={handleAddDept} onDeleteDepartment={handleDeleteDept} onClearAllData={handleClearAllInventory} currentUser={currentUser} formConfig={formConfig} onUpdateFormConfig={setFormConfig} appConfig={appConfig} onUpdateAppConfig={setAppConfig} />;
       default:
         return <div className="py-20 text-center text-slate-400">Section available in standard version...</div>;
     }
@@ -249,36 +235,16 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden relative">
-      {/* Sidebar Overlay for Mobile */}
       {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        ></div>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsSidebarOpen(false)}></div>
       )}
 
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={(tab) => {
-          setActiveTab(tab);
-          if (window.innerWidth < 1024) setIsSidebarOpen(false);
-        }} 
-        user={currentUser} 
-        appConfig={appConfig}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+      <Sidebar activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); if (window.innerWidth < 1024) setIsSidebarOpen(false); }} user={currentUser} appConfig={appConfig} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <header className="h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between sticky top-0 z-20 shrink-0">
           <div className="flex items-center gap-3 md:gap-6 flex-1">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors lg:hidden"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors lg:hidden"><Menu className="w-6 h-6" /></button>
             {hasPermission('GLOBAL_ACCESS') ? (
               <div className="relative">
                 <button onClick={() => setIsDeptMenuOpen(!isDeptMenuOpen)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200">
@@ -306,7 +272,7 @@ const App: React.FC = () => {
             )}
             <div className="relative w-full max-w-xs hidden lg:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input type="text" placeholder={`Quick find...`} className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              <input type="text" placeholder={`Quick find...`} className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm text-black font-medium focus:ring-2 focus:ring-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
           </div>
 
